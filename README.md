@@ -133,7 +133,7 @@ VITE_SUPABASE_ANON_KEY=your-anon-public-key
    - Add environment variables (optional): `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`.
 3. Click **Save and Deploy**. Cloudflare Pages will build and deploy your site with global edge CDN and instant SSL.
 
-The included `public/_redirects` ensures seamless client-side single-page routing without 404s.
+Cloudflare Pages natively handles Single-Page Application (SPA) routing: any client-side routes (such as `/admin`, `/amazon-deals`, `/myntra-fashion`, `/categories`, `/product/:id`) automatically serve `dist/index.html` with HTTP 200 without requiring any `_redirects` file.
 
 ---
 
