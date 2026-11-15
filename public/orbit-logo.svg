@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <defs>
+    <linearGradient id="orbitGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8B5CF6" />
+      <stop offset="50%" stop-color="#6366F1" />
+      <stop offset="100%" stop-color="#EC4899" />
+    </linearGradient>
+    <linearGradient id="glowGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#06B6D4" />
+      <stop offset="100%" stop-color="#8B5CF6" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Outer glowing orbit ring -->
+  <ellipse cx="50" cy="50" rx="42" ry="22" stroke="url(#orbitGrad)" stroke-width="4" transform="rotate(-25 50 50)" stroke-dasharray="12 4" stroke-linecap="round" opacity="0.85"/>
+  
+  <!-- Core sphere -->
+  <circle cx="50" cy="50" r="22" fill="url(#orbitGrad)" />
+  
+  <!-- Highlight gloss -->
+  <ellipse cx="44" cy="42" rx="9" ry="5" fill="#ffffff" opacity="0.35" transform="rotate(-30 44 42)"/>
+  
+  <!-- Satellite planet -->
+  <circle cx="82" cy="38" r="6" fill="#06B6D4" />
+  <circle cx="18" cy="62" r="4.5" fill="#EC4899" />
+  
+  <!-- Inner shopping cart spark / bag curve -->
+  <path d="M43 46 H57 L54 57 H46 Z" fill="#ffffff" opacity="0.9" />
+  <path d="M47 46 V42 C47 40.5 48.5 39 50 39 C51.5 39 53 40.5 53 42 V46" stroke="#ffffff" stroke-width="2" stroke-linecap="round" fill="none"/>
+</svg>
