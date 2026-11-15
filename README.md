@@ -28,7 +28,7 @@ ShopOrbit curates handpicked price drops, verified electronics steals, and trend
    - Recent shopper click event log.
    - Supabase connection status indicator with SQL schema setup script.
    - Demo catalog reset button.
-   - Protected with admin passcode (Default demo passcode: `orbitadmin`).
+   - Protected with private admin authentication (verified server-side via Cloudflare Pages Functions or Supabase Auth; passwords never exposed in frontend code).
 5. **SEO & Compliance Ready:**
    - Dynamic document titles and meta descriptions per page.
    - Prominent **Affiliate Disclosure Banner** and footer statement compliant with FTC, ASCI, and Amazon Associates Operating Agreement guidelines.

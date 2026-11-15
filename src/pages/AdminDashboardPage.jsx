@@ -16,10 +16,15 @@ import {
   X,
   Search,
   Eye,
+  EyeOff,
   Layers,
   Sparkles,
   Copy,
-  Check
+  Check,
+  KeyRound,
+  ShieldCheck,
+  FileCode2,
+  Server
 } from 'lucide-react'
 import { useProducts } from '../context/ProductContext'
 import { useAuth } from '../context/AuthContext'
@@ -39,16 +44,24 @@ export const AdminDashboardPage = () => {
 
   const {
     isAdmin,
-    loginWithPin,
+    user,
+    loginWithPassword,
     loginWithSupabase,
+    changeAdminPassword,
     logoutAdmin,
     authError,
     authLoading,
-    defaultDemoPin
+    isLocalMode
   } = useAuth()
 
-  const [pinInput, setPinInput] = useState('')
-  const [activeTab, setActiveTab] = useState('products') // 'products' | 'analytics' | 'supabase'
+  // Login form state
+  const [passwordInput, setPasswordInput] = useState('')
+  const [emailInput, setEmailInput] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [authMethod, setAuthMethod] = useState('password') // 'password' | 'supabase'
+
+  // Dashboard state
+  const [activeTab, setActiveTab] = useState('products') // 'products' | 'analytics' | 'supabase' | 'security'
   const [adminSearch, setAdminSearch] = useState('')
   const [platformFilter, setPlatformFilter] = useState('All')
 
@@ -56,6 +69,18 @@ export const AdminDashboardPage = () => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState(null)
   const [copiedSql, setCopiedSql] = useState(false)
+
+  // Change Password state
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [changeStatus, setChangeStatus] = useState(null)
+  const [changeLoading, setChangeLoading] = useState(false)
+
+  // Standalone Hash Generator state
+  const [calcInput, setCalcInput] = useState('')
+  const [generatedHash, setGeneratedHash] = useState('')
+  const [copiedHash, setCopiedHash] = useState(false)
 
   // New product form state
   const initialFormState = {
@@ -74,10 +99,73 @@ export const AdminDashboardPage = () => {
   }
   const [formData, setFormData] = useState(initialFormState)
 
-  // If not logged in, show login panel
+  // Hash calculator function
+  const computeHash = async (text) => {
+    if (!text) {
+      setGeneratedHash('')
+      return
+    }
+    const encoder = new TextEncoder()
+    const data = encoder.encode(text)
+    const hash = await crypto.subtle.digest('SHA-256', data)
+    const hashHex = Array.from(new Uint8Array(hash))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('')
+    setGeneratedHash(hashHex)
+  }
+
+  // Handle Login submission
+  const handleLoginSubmit = async (e) => {
+    e.preventDefault()
+    if (authMethod === 'supabase') {
+      await loginWithSupabase(emailInput, passwordInput)
+    } else {
+      await loginWithPassword(passwordInput)
+    }
+  }
+
+  // Handle Change Password submission
+  const handleChangePassword = async (e) => {
+    e.preventDefault()
+    setChangeStatus(null)
+
+    if (newPassword !== confirmPassword) {
+      setChangeStatus({ success: false, message: 'New passwords do not match' })
+      return
+    }
+
+    if (newPassword.length < 8) {
+      setChangeStatus({ success: false, message: 'Password must be at least 8 characters' })
+      return
+    }
+
+    setChangeLoading(true)
+    const res = await changeAdminPassword({ currentPassword, newPassword })
+    setChangeLoading(false)
+
+    if (res.success) {
+      setChangeStatus({
+        success: true,
+        message: res.message || 'Password updated successfully.',
+        newHash: res.newHash
+      })
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
+    } else {
+      setChangeStatus({
+        success: false,
+        message: res.error || 'Failed to update password'
+      })
+    }
+  }
+
+  // -------------------------------------------------------------
+  // LOGIN SCREEN (Gated when not authenticated)
+  // -------------------------------------------------------------
   if (!isAdmin) {
     return (
-      <div className="min-h-[80vh] flex items-center justify-center p-4">
+      <div className="min-h-[85vh] flex items-center justify-center p-4">
         <SEO title="Admin Login | ShopOrbit" />
         <div className="bg-[#0D1322] border border-slate-800 rounded-3xl p-8 max-w-md w-full shadow-2xl relative overflow-hidden">
           <div className="absolute top-0 right-0 w-48 h-48 bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
@@ -90,57 +178,111 @@ export const AdminDashboardPage = () => {
               ShopOrbit Admin
             </h1>
             <p className="text-xs text-slate-400 mt-1">
-              Manage affiliate products, track outbound clicks, and monitor deals.
+              Private access for catalog management & analytics.
             </p>
           </div>
 
-          <form
-            onSubmit={(e) => {
-              e.preventDefault()
-              loginWithPin(pinInput)
-            }}
-            className="space-y-4"
-          >
+          {/* Toggle between Password & Supabase Auth */}
+          {isSupabaseConfigured() && (
+            <div className="flex rounded-xl bg-slate-900 p-1 mb-5 border border-slate-800 text-xs font-semibold">
+              <button
+                type="button"
+                onClick={() => setAuthMethod('password')}
+                className={`flex-1 py-1.5 rounded-lg transition ${
+                  authMethod === 'password'
+                    ? 'bg-purple-600 text-white shadow'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Admin Password
+              </button>
+              <button
+                type="button"
+                onClick={() => setAuthMethod('supabase')}
+                className={`flex-1 py-1.5 rounded-lg transition ${
+                  authMethod === 'supabase'
+                    ? 'bg-purple-600 text-white shadow'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Supabase Auth
+              </button>
+            </div>
+          )}
+
+          <form onSubmit={handleLoginSubmit} className="space-y-4">
+            {authMethod === 'supabase' && (
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-400 block mb-1.5">
+                  Admin Email
+                </label>
+                <input
+                  type="email"
+                  required
+                  placeholder="admin@shoporbit.in"
+                  value={emailInput}
+                  onChange={(e) => setEmailInput(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-purple-500"
+                />
+              </div>
+            )}
+
             <div>
               <label className="text-xs font-bold uppercase tracking-wider text-slate-400 block mb-1.5">
-                Admin Passcode
+                {authMethod === 'supabase' ? 'Account Password' : 'Admin Private Password'}
               </label>
-              <input
-                type="password"
-                placeholder="Enter admin passcode..."
-                value={pinInput}
-                onChange={(e) => setPinInput(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-purple-500"
-              />
-              <p className="text-[11px] text-slate-500 mt-1.5">
-                💡 Demo Passcode: <code className="text-purple-400 bg-slate-900 px-1 py-0.5 rounded">{defaultDemoPin}</code>
-              </p>
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  placeholder="Enter your private password..."
+                  value={passwordInput}
+                  onChange={(e) => setPasswordInput(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-4 pr-10 py-2.5 text-white text-sm focus:outline-none focus:border-purple-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
 
             {authError && (
-              <div className="text-rose-400 text-xs bg-rose-500/10 border border-rose-500/20 p-2.5 rounded-xl">
-                {authError}
+              <div className="flex items-start gap-2 text-rose-400 text-xs bg-rose-500/10 border border-rose-500/20 p-3 rounded-xl">
+                <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                <span>{authError}</span>
               </div>
             )}
 
             <button
               type="submit"
               disabled={authLoading}
-              className="w-full py-2.5 px-4 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-sm shadow-lg shadow-purple-600/30 transition-all active:scale-95"
+              className="w-full py-2.5 px-4 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-sm shadow-lg shadow-purple-600/30 transition-all active:scale-95 disabled:opacity-50"
             >
-              Unlock Dashboard
+              {authLoading ? 'Verifying Credentials...' : 'Sign In to Dashboard'}
             </button>
           </form>
 
-          <div className="mt-6 pt-6 border-t border-slate-800 text-center">
-            <span className="text-[11px] text-slate-400">
-              Supabase Status: {isSupabaseConfigured() ? '🟢 Connected' : '🟡 Local Storage Mode (Ready to sync)'}
-            </span>
+          <div className="mt-6 pt-6 border-t border-slate-800 text-center space-y-2">
+            <div className="flex items-center justify-center gap-2 text-[11px] text-slate-400">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Protected with Server-Side Verification</span>
+            </div>
+            <p className="text-[10px] text-slate-500">
+              Password credentials are never hardcoded or exposed in frontend code.
+            </p>
           </div>
         </div>
       </div>
     )
   }
+
+  // -------------------------------------------------------------
+  // AUTHENTICATED DASHBOARD
+  // -------------------------------------------------------------
 
   // Calculate analytics
   const totalClicks = products.reduce((acc, p) => acc + (p.clicks || 0), 0)
@@ -287,7 +429,7 @@ CREATE TABLE IF NOT EXISTS product_clicks (
               </h1>
             </div>
             <p className="text-xs text-slate-400 mt-1">
-              Affiliate Link Redirection • Click Analytics • Catalog Operations
+              {user ? `Logged in as ${user.email}` : 'Private Admin Session Active • Cloudflare Pages Protected'}
             </p>
           </div>
 
@@ -306,22 +448,23 @@ CREATE TABLE IF NOT EXISTS product_clicks (
             <button
               onClick={resetToDemo}
               className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition"
-              title="Reset to default demo data"
+              title="Reset catalog"
             >
               <RotateCcw className="w-4 h-4" />
             </button>
 
             <button
               onClick={logoutAdmin}
-              className="px-3.5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-rose-400 border border-rose-500/20 text-xs font-semibold transition"
+              className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-900 hover:bg-rose-950/60 text-rose-400 border border-rose-500/30 text-xs font-semibold transition active:scale-95"
             >
-              Logout
+              <Lock className="w-3.5 h-3.5" />
+              <span>Log Out</span>
             </button>
           </div>
         </div>
 
         {/* Tab Switcher */}
-        <div className="flex items-center gap-2 p-1 bg-slate-900 border border-slate-800 rounded-2xl w-fit">
+        <div className="flex flex-wrap items-center gap-2 p-1 bg-slate-900 border border-slate-800 rounded-2xl w-fit">
           <button
             onClick={() => setActiveTab('products')}
             className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition ${
@@ -340,7 +483,18 @@ CREATE TABLE IF NOT EXISTS product_clicks (
                 : 'text-slate-400 hover:text-white'
             }`}
           >
-            Click Analytics & Popular Deals
+            Click Analytics & Deals
+          </button>
+          <button
+            onClick={() => setActiveTab('security')}
+            className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-1.5 ${
+              activeTab === 'security'
+                ? 'bg-purple-600 text-white shadow'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <KeyRound className="w-3.5 h-3.5" />
+            Security & Password
           </button>
           <button
             onClick={() => setActiveTab('supabase')}
@@ -602,7 +756,177 @@ CREATE TABLE IF NOT EXISTS product_clicks (
           </div>
         )}
 
-        {/* --- TAB 3: SUPABASE INTEGRATION & CLOUDFLARE PAGES --- */}
+        {/* --- TAB 3: SECURITY & PASSWORD MANAGEMENT --- */}
+        {activeTab === 'security' && (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            
+            {/* Left Column: Change Password Form (7 cols) */}
+            <div className="lg:col-span-7 bg-[#0D1322] border border-slate-800 rounded-3xl p-6 sm:p-8 space-y-6">
+              <div className="flex items-center gap-3 pb-4 border-b border-slate-800">
+                <div className="p-2.5 rounded-xl bg-purple-600/20 text-purple-400 border border-purple-500/30">
+                  <KeyRound className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-white">Change Admin Password</h2>
+                  <p className="text-xs text-slate-400">
+                    Update your private admin credentials with server verification.
+                  </p>
+                </div>
+              </div>
+
+              <form onSubmit={handleChangePassword} className="space-y-4">
+                <div>
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-400 block mb-1.5">
+                    Current Admin Password
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    placeholder="Enter current password..."
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-400 block mb-1.5">
+                    New Private Password
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    minLength={8}
+                    placeholder="Enter new strong password (min 8 characters)..."
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-400 block mb-1.5">
+                    Confirm New Password
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    minLength={8}
+                    placeholder="Re-type new password to confirm..."
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+
+                {changeStatus && (
+                  <div
+                    className={`p-3.5 rounded-xl text-xs flex items-start gap-2 ${
+                      changeStatus.success
+                        ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-300'
+                        : 'bg-rose-500/15 border border-rose-500/30 text-rose-300'
+                    }`}
+                  >
+                    {changeStatus.success ? (
+                      <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5 text-emerald-400" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-rose-400" />
+                    )}
+                    <div>
+                      <div>{changeStatus.message}</div>
+                      {changeStatus.newHash && (
+                        <div className="mt-2 p-2 bg-slate-950 rounded font-mono text-[11px] text-purple-300 break-all select-all">
+                          SHA-256: {changeStatus.newHash}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={changeLoading}
+                  className="w-full py-2.5 px-4 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-sm shadow-lg shadow-purple-600/30 transition active:scale-95 disabled:opacity-50"
+                >
+                  {changeLoading ? 'Updating Password...' : 'Save New Password'}
+                </button>
+              </form>
+            </div>
+
+            {/* Right Column: Cloudflare Secret Setup Guide & Hash Calculator (5 cols) */}
+            <div className="lg:col-span-5 space-y-6">
+              
+              {/* Standalone Hash Generator */}
+              <div className="bg-[#0D1322] border border-slate-800 rounded-3xl p-6 space-y-4">
+                <div className="flex items-center gap-2 text-white font-bold text-base">
+                  <ShieldCheck className="w-5 h-5 text-purple-400" />
+                  <span>Generate Cloudflare Secret Hash</span>
+                </div>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Generate the cryptographic SHA-256 hash for any new password to set in your Cloudflare Pages dashboard:
+                </p>
+
+                <div className="space-y-2">
+                  <input
+                    type="password"
+                    placeholder="Type password to compute hash..."
+                    value={calcInput}
+                    onChange={(e) => {
+                      setCalcInput(e.target.value)
+                      computeHash(e.target.value)
+                    }}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
+                  />
+
+                  {generatedHash && (
+                    <div className="relative bg-slate-950 p-3 rounded-xl border border-slate-800 text-[11px] font-mono text-purple-300 break-all">
+                      <div className="text-[10px] text-slate-500 uppercase font-sans font-bold mb-1">
+                        SHA-256 Hash
+                      </div>
+                      {generatedHash}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(generatedHash)
+                          setCopiedHash(true)
+                          setTimeout(() => setCopiedHash(false), 2000)
+                        }}
+                        className="mt-2 flex items-center gap-1 text-xs text-slate-300 hover:text-white bg-slate-800 px-2.5 py-1 rounded"
+                      >
+                        {copiedHash ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                        <span>{copiedHash ? 'Copied' : 'Copy Hash'}</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Step-by-Step Cloudflare Instructions */}
+              <div className="bg-[#0D1322] border border-slate-800 rounded-3xl p-6 space-y-3">
+                <div className="flex items-center gap-2 text-white font-bold text-sm">
+                  <Server className="w-4 h-4 text-purple-400" />
+                  <span>Cloudflare Pages Secret Setup</span>
+                </div>
+                <ol className="list-decimal list-inside space-y-2 text-xs text-slate-300 leading-relaxed">
+                  <li>In Cloudflare, go to <strong className="text-white">Workers & Pages &gt; shoporbit</strong>.</li>
+                  <li>Click <strong className="text-white">Settings &gt; Environment variables</strong>.</li>
+                  <li>Under <strong className="text-white">Production</strong>, click <strong className="text-purple-400">Add variable</strong>:
+                    <div className="mt-1.5 p-2 bg-slate-950 rounded border border-slate-800 font-mono text-[11px] space-y-1">
+                      <div>Variable: <span className="text-emerald-400">ADMIN_PASSWORD_HASH</span></div>
+                      <div>Type: <span className="text-amber-400">Secret (Encrypted)</span></div>
+                      <div>Value: <span className="text-purple-300">[Paste your SHA-256 hash]</span></div>
+                    </div>
+                  </li>
+                  <li>Click <strong className="text-white">Save</strong>. Your private password is immediately active across all edge nodes!</li>
+                </ol>
+              </div>
+
+            </div>
+
+          </div>
+        )}
+
+        {/* --- TAB 4: SUPABASE CONFIG --- */}
         {activeTab === 'supabase' && (
           <div className="bg-[#0D1322] border border-slate-800 rounded-2xl p-6 sm:p-8 space-y-6">
             <div className="flex items-center justify-between">
@@ -621,11 +945,11 @@ CREATE TABLE IF NOT EXISTS product_clicks (
 
             <div className="space-y-3 text-xs sm:text-sm text-slate-300 leading-relaxed">
               <p>
-                ShopOrbit is engineered to work <strong>100% out of the box</strong> using resilient persistent storage, and can seamlessly connect to your free-tier Supabase project at any time.
+                ShopOrbit supports dual authentication: Cloudflare Edge Functions + Supabase Auth.
               </p>
               <ol className="list-decimal list-inside space-y-2 text-slate-400 pl-2">
                 <li>Create a free project at <strong className="text-white">supabase.com</strong></li>
-                <li>Go to the <strong>SQL Editor</strong> in your Supabase dashboard and run the schema query below:</li>
+                <li>Go to the <strong className="text-white">SQL Editor</strong> in your Supabase dashboard and run the schema query below:</li>
               </ol>
             </div>
 
@@ -639,10 +963,6 @@ CREATE TABLE IF NOT EXISTS product_clicks (
                 <span>{copiedSql ? 'Copied SQL' : 'Copy SQL Script'}</span>
               </button>
               <pre className="pr-24">{supabaseSql}</pre>
-            </div>
-
-            <div className="p-4 rounded-xl bg-purple-950/40 border border-purple-500/30 text-xs text-purple-200">
-              <strong>Cloudflare Pages Deployment:</strong> To deploy to Cloudflare Pages, simply push this repository to GitHub or run <code>npm run build</code> and point Cloudflare Pages build output directory to <code>dist</code> with build command <code>npm run build</code>.
             </div>
           </div>
         )}
